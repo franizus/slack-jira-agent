@@ -66,6 +66,7 @@ export const createJiraIssueTool = tool(
       if (axios.isAxiosError(error)) {
         const errorMessage =
           error.response?.data?.errorMessages?.join(", ") || error.message;
+        console.log(`Error al crear el issue en Jira: ${errorMessage}`);
         throw new Error(`Error al crear el issue en Jira: ${errorMessage}`);
       }
       throw error;
