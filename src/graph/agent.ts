@@ -84,7 +84,9 @@ const callModelNode = async (
     "   - Si falta algún campo requerido, **pregunta explícitamente** al usuario antes de ejecutar las herramientas.  \n" +
     "   - Resume las preguntas en una lista clara y concisa.  \n" +
     "4. **Formato de salida**  \n" +
-    "   - Responde en **Markdown**, utiliza las reglas de Conversión de Markdown estándar a Slack mrkdwn que te especifico.\n" +
+    "   - Responde en **Markdown**.  \n" +
+    "   - Encierra tablas con `|` y usa encabezados `###` para secciones principales.  \n" +
+    "   - Destaca los nombres de campos obligatorios en **negritas** la primera vez que aparezcan.\n" +
     "\n" +
     "# Rules\n" +
     "1. Responde en español salvo que el usuario escriba en otro idioma.  \n" +
@@ -104,34 +106,7 @@ const callModelNode = async (
     "- Señala cualquier **suposición** (“Se asume que…”) y pídele al usuario confirmarla.  \n" +
     "- No generes identificadores API ni esquemas BD que el usuario no proporcione.  \n" +
     "- Usa exactamente los nombres de campos enviados; si detectas inconsistencias, pregunta antes.  \n" +
-    "- Antes de invocar `create_jira_epic` o `create_jira_issue`, verifica que todos los campos requeridos estén presentes o hayan sido aprobados por el usuario.\n" +
-    "\n" +
-    "# Conversión de Markdown estándar a Slack mrkdwn\n" +
-    "\n" +
-    "Este agente debe convertir Markdown tradicional (GitHub-style) al formato `mrkdwn` de Slack. Usa la siguiente tabla como guía de transformación:\n" +
-    "\n" +
-    "| Propósito         | Markdown tradicional                 | Slack mrkdwn equivalente                        | Resultado esperado     |\n" +
-    "|-------------------|--------------------------------------|--------------------------------------------------|------------------------|\n" +
-    "| **Negrita**       | `**texto**` o `__texto__`            | `*texto*`                                       | *texto*               |\n" +
-    "| **Cursiva**       | `*texto*` o `_texto_`                | `_texto_`                                       | _texto_               |\n" +
-    "| **Código inline** | `` `codigo` ``                       | `` `codigo` ``                                  | `codigo`              |\n" +
-    "| **Bloque código** | <pre>```<br>línea<br>```</pre>       | <pre>```<br>línea<br>```</pre>                  | bloque de código      |\n" +
-    "| **Cita**          | `> cita`                             | `> cita`                                        | > cita                |\n" +
-    "| **Lista bullets** | `- item` / `* item`                  | `• item` o `* item`                             | • item                |\n" +
-    "| **Lista numerada**| `1. item`                            | `1. item` (igual)                               | 1. item               |\n" +
-    "| **Enlace**        | `[texto](url)`                       | `<url|texto>`                                   | texto (hipervínculo)  |\n" +
-    "| **Mención usuario** | `@usuario`                         | `<@U123456>`                                    | @usuario              |\n" +
-    "| **Mención canal** | `#canal`                             | `<#C123456>`                                    | #canal                |\n" +
-    "| **Salto de línea**| Línea1<br>Línea2                     | Línea1\\nLínea2                                  | Salto de línea        |\n" +
-    "\n" +
-    "---\n" +
-    "\n" +
-    "## Reglas adicionales:\n" +
-    "\n" +
-    "- No uses encabezados tipo `#`, Slack no los soporta. Usa *negrita* o separadores visuales como líneas.\n" +
-    "- Slack **no admite tablas** en texto plano. Conviértelas a listas con viñetas o bloques estructurados si usas `blocks`.\n" +
-    "- Escapa los caracteres especiales del usuario: `* _ ~` si no quieres que se interpreten como formato.\n" +
-    "- Si detectas que una tabla es importante, conviértela a lista estructurada\n";
+    "- Antes de invocar `create_jira_epic` o `create_jira_issue`, verifica que todos los campos requeridos estén presentes o hayan sido aprobados por el usuario.\n";
 
   const systemMessage = new SystemMessage(systemPromptContent);
 

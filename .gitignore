@@ -9,3 +9,4 @@ cdk.out
 
 # Archivo de variables de entorno locales
 .env
+.idea

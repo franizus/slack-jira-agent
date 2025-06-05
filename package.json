@@ -31,6 +31,7 @@
     "@langchain/langgraph": "^0.3.0",
     "@langchain/langgraph-checkpoint-mongodb": "^0.0.6",
     "@slack/web-api": "^7.9.2",
+    "@tryfabric/mack": "^1.2.1",
     "aws-cdk-lib": "^2.171.1",
     "aws-lambda": "^1.0.7",
     "axios": "^1.9.0",

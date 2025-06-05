@@ -1,6 +1,7 @@
 import { Context, Handler } from "aws-lambda";
 import { runAgent } from "./graph/agent";
 import { getUserName, sendMessage } from "./slack"; // Importar el agente
+import { markdownToBlocks } from "@tryfabric/mack";
 
 export const handler: Handler = async (event: any, context: Context) => {
   try {
@@ -22,7 +23,9 @@ export const handler: Handler = async (event: any, context: Context) => {
     console.log(`Agent response: ${agentResponse}`);
 
     if (agentResponse) {
-      await sendMessage(channelId, agentResponse, threadId);
+      const blocks = await markdownToBlocks(agentResponse);
+
+      await sendMessage(channelId, "", threadId, blocks);
     }
 
     return {
