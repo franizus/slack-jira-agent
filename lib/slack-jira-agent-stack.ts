@@ -22,6 +22,9 @@ export class SlackJiraAgentStack extends cdk.Stack {
         GOOGLE_API_KEY: process.env.GOOGLE_API_KEY!,
         SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN!,
         MONGODB_URI: process.env.MONGODB_URI!,
+        JIRA_DOMAIN: process.env.JIRA_DOMAIN!,
+        JIRA_EMAIL: process.env.JIRA_EMAIL!,
+        JIRA_API_TOKEN: process.env.JIRA_API_TOKEN!,
       },
     });
 
