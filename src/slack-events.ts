@@ -54,7 +54,7 @@ export const handler: Handler = async (
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Puedo ayudarte a convertir *texto libre o contexto de producto* en artefactos listos para Jira: épicas, historias de usuario, subtareas técnicas y más.\n\nPuedes empezar escribiendo algo como:\n• `Crea una épica para exponer comerceCode en el API de branches`\n• `Genera historias con criterios de aceptación para este flujo`\n\n¿Con qué quieres comenzar?",
+              text: "Puedo ayudarte a convertir *texto libre o contexto de producto* en artefactos listos para Jira: épicas, historias de usuario, subtareas técnicas y más. También puedo ayudarte a generar código.\n\nPuedes empezar escribiendo algo como:\n• `Crea una épica para exponer comerceCode en el API de branches`\n• `Genera historias con criterios de aceptación para este flujo`\n• `Desarrolla una función que sume dos números en el microservicio usrv-sandbox`\n\n¿Con qué quieres comenzar?",
             },
           },
         ]);

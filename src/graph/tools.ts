@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import axios from "axios";
+import { EventSource } from "eventsource"; // MessageEvent debería estar disponible globalmente con @types/eventsource
 
 // Jira configuration from environment variables
 const JIRA_DOMAIN = process.env.JIRA_DOMAIN;
@@ -91,4 +92,86 @@ export const createJiraIssueTool = tool(
   }
 );
 
-export const tools = [createJiraIssueTool];
+// Eliminada la primera declaración de 'tools' para evitar redeclaración.
+const DEVELOPMENT_AGENT_URL = process.env.DEVELOPMENT_AGENT_URL;
+const DEVELOPMENT_AGENT_API_KEY = process.env.DEVELOPMENT_AGENT_API_KEY;
+
+if (!DEVELOPMENT_AGENT_URL || !DEVELOPMENT_AGENT_API_KEY) {
+  throw new Error("Missing required Development Agent configuration in environment variables");
+}
+
+export const sendTaskToDevelopmentTool = tool(
+  async ({ query, jiraTicketID }: { query: string, jiraTicketID?: string }) => {
+    return new Promise<string>((resolve, reject) => {
+      const url = DEVELOPMENT_AGENT_URL;
+      const headers = {
+        "Content-Type": "application/json",
+        "x-api-key": DEVELOPMENT_AGENT_API_KEY,
+        Accept: "application/octet-stream",
+      };
+      let request = query;
+      if (jiraTicketID) {
+        request += `\nPuedes obtener más información del ticket de Jira: ${jiraTicketID}`;
+      }
+      const body = JSON.stringify({ query: request });
+
+      const es = new EventSource(url, {
+        method: "POST",
+        headers: headers,
+        body: body,
+      } as EventSourceInit);
+
+      let fullResponse = "";
+
+      es.onmessage = (event: MessageEvent) => {
+        fullResponse += event.data;
+      };
+
+      es.onerror = (error: Event) => { // Usar Event o any si MessageEvent no es adecuado para error
+        console.error("SSE Error:", error);
+        es.close();
+        // @ts-ignore
+        const errorMessage = error.message || "Error desconocido";
+        reject(
+          new Error(
+            `Error en la conexión SSE: ${errorMessage}`
+          )
+        );
+      };
+
+      const originalOnMessage = es.onmessage;
+      es.onmessage = (event: MessageEvent) => { // Especificar tipo para event
+        if (event.data === "[DONE]") {
+          es.close();
+          resolve(fullResponse);
+          return;
+        }
+        // Asegurarse de que originalOnMessage no sea null antes de llamarlo
+        if (originalOnMessage) {
+          originalOnMessage(event);
+        }
+      };
+    });
+  },
+  {
+    name: "send_task_to_developement",
+    description:
+      "Realiza una petición a un servicio de desarrollo de código mediante SSE y devuelve la respuesta completa.",
+    schema: z.object({
+      query: z
+        .string()
+        .describe(
+          "La pregunta o instrucción para el servicio de desarrollo de código."
+        ),
+      jiraTicketID: z
+        .string()
+        .optional()
+        .describe(
+          "ID del ticket de Jira relacionado, opcional. Si se proporciona, se incluirá en la petición."
+        ),
+    }),
+  }
+);
+
+// Modificada la declaración de 'tools' para incluir ambas herramientas.
+export const tools = [createJiraIssueTool, sendTaskToDevelopmentTool];

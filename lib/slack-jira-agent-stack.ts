@@ -15,7 +15,7 @@ export class SlackJiraAgentStack extends cdk.Stack {
     const slackAgentLambda = new NodejsFunction(this, 'slackAgentLambda', {
       runtime: Runtime.NODEJS_22_X,
       entry: path.join(__dirname, `../src/slack-agent.ts`),
-      timeout: cdk.Duration.seconds(60), // Set a timeout for the Lambda function
+      timeout: cdk.Duration.seconds(900), // Set a timeout for the Lambda function
       handler: 'handler', // Assumes the entry point is slack-events.js and the handler is named handler
       environment: {
         // Add any environment variables needed for your Lambda function
