@@ -39,6 +39,7 @@
     "constructs": "^10.4.2",
     "eventsource": "^4.0.0",
     "langchain": "^0.3.27",
+    "marked": "^15.0.12",
     "mongodb": "^6.17.0",
     "zod": "^3.25.51"
   }

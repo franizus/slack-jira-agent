@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import axios from "axios";
+import { marked } from "marked";
 import { EventSource } from "eventsource"; // MessageEvent debería estar disponible globalmente con @types/eventsource
 
 // Jira configuration from environment variables
@@ -12,6 +13,46 @@ if (!JIRA_DOMAIN || !JIRA_EMAIL || !JIRA_API_TOKEN) {
   throw new Error("Missing required Jira configuration in environment variables");
 }
 
+/**
+ * Converts Markdown to Atlassian Document Format (ADF).
+ * @param markdown - The Markdown string to convert.
+ * @returns ADF-compliant JSON object.
+ */
+function markdownToADF(markdown: string): any {
+  const tokens = marked.lexer(markdown);
+  const adfContent: any[] = [];
+
+  tokens.forEach((token) => {
+    if (token.type === "paragraph") {
+      adfContent.push({
+        type: "paragraph",
+        content: [{ type: "text", text: token.text }],
+      });
+    } else if (token.type === "table") {
+      const tableContent = token.rows.map((row: any[]) => ({
+        type: "tableRow",
+        content: row.map((cell) => ({
+          type: "tableCell",
+          content: [{ type: "text", text: cell }],
+        })),
+      }));
+
+      adfContent.push({
+        type: "table",
+        content: tableContent,
+      });
+    }
+    // Add more token types as needed
+  });
+
+  return {
+    type: "doc",
+    version: 1,
+    content: adfContent,
+  };
+}
+
+// Update the createJiraIssueTool to use markdownToADF
 export const createJiraIssueTool = tool(
   async ({ projectKey, summary, description, issueType }) => {
     console.log("Intentando crear issue en Jira:");
@@ -21,6 +62,8 @@ export const createJiraIssueTool = tool(
     console.log(`  Tipo de Issue: ${issueType}`);
 
     try {
+      const adfDescription = markdownToADF(description);
+
       const response = await axios.post(
         `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
         {
@@ -29,21 +72,7 @@ export const createJiraIssueTool = tool(
               key: projectKey,
             },
             summary: summary,
-            description: {
-              type: "doc",
-              version: 1,
-              content: [
-                {
-                  type: "paragraph",
-                  content: [
-                    {
-                      type: "text",
-                      text: description,
-                    },
-                  ],
-                },
-              ],
-            },
+            description: adfDescription,
             issuetype: {
               name: issueType,
             },
