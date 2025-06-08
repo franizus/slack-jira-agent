@@ -28,14 +28,48 @@ function markdownToADF(markdown: string): any {
         type: "paragraph",
         content: [{ type: "text", text: token.text }],
       });
+    } else if (token.type === "heading") {
+      adfContent.push({
+        type: "heading",
+        attrs: {
+          level: token.depth
+        },
+        content: [{ type: "text", text: token.text }],
+      });
     } else if (token.type === "table") {
       const tableContent = token.rows.map((row: any[]) => ({
         type: "tableRow",
         content: row.map((cell) => ({
           type: "tableCell",
-          content: [{ type: "text", text: cell }],
+          content: [{
+            type: "paragraph",
+            content: [{
+              type: "text",
+              text: cell.text || "",
+            }],
+          }],
         })),
       }));
+      if(token.header) {
+        tableContent.unshift({
+          type: "tableRow",
+          content: token.header.map((cell: { text: any; }) => ({
+            type: "tableHeader",
+            content: [{
+              type: "paragraph",
+              content: [{
+                type: "text",
+                text: cell.text || "",
+                marks: [
+                  {
+                    "type": "strong"
+                  }
+                ]
+              }]
+            }],
+          })),
+        });
+      }
 
       adfContent.push({
         type: "table",
@@ -204,3 +238,4 @@ export const sendTaskToDevelopmentTool = tool(
 
 // Modificada la declaración de 'tools' para incluir ambas herramientas.
 export const tools = [createJiraIssueTool, sendTaskToDevelopmentTool];
+

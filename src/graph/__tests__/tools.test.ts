@@ -1,64 +1,161 @@
-import { createJiraIssueTool } from '../tools';
 import axios from 'axios';
 
 jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+const mockEnv = {
+  JIRA_DOMAIN: 'kushki',
+  JIRA_EMAIL: 'test@mail.com',
+  JIRA_API_TOKEN: '1234',
+} as const;
+const mockEnvJira = {
+  DEVELOPMENT_AGENT_URL: "agent-dev.kushki.com",
+  DEVELOPMENT_AGENT_API_KEY: "dev-api",
+} as const;
+
+const testIssueData = {
+  projectKey: 'TEST',
+  summary: 'Test Issue',
+  description: 'Test Description',
+  issueType: 'Bug'
+} as const;
+
+interface JiraRequestBody {
+  fields: {
+    project: { key: string };
+    summary: string;
+    description: {
+      type: 'doc';
+      version: 1;
+      content: Array<{
+        type: string;
+        content?: Array<{ type: string; text: string }>;
+      }>;
+    };
+    issuetype: { name: string };
+  };
+}
 
 describe('createJiraIssueTool', () => {
+  const mockedAxios = jest.mocked(axios);
   const originalEnv = process.env;
 
+  beforeAll(() => {
+    process.env = { ...originalEnv, ...mockEnv, ...mockEnvJira };
+  });
+
   beforeEach(() => {
-    // Reset process.env before each test
-    process.env = { ...originalEnv };
-
-    // Set required environment variables
-    process.env.JIRA_DOMAIN = "kushki";
-    process.env.JIRA_EMAIL = "test@mail.com";
-    process.env.JIRA_API_TOKEN = "1234";
-
-    // Reset mock before each test
-    jest.clearAllMocks();
-
-    // Setup default mock response
+    jest.resetModules();
     mockedAxios.post.mockResolvedValue({
-      data: { key: 'TEST-123' }
+      data: { key: 'TEST-123' },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { headers: {} }
     });
   });
 
   afterEach(() => {
-    // Restore process.env after each test
+    jest.clearAllMocks();
+  });
+
+  afterAll(() => {
     process.env = originalEnv;
-    jest.resetModules();
+    jest.restoreAllMocks();
   });
 
-  it('should throw error when JIRA_DOMAIN is missing', async () => {
-    delete process.env.JIRA_DOMAIN;
-    jest.isolateModules(async () => {
-      expect(() => require('../tools')).toThrow('Missing required Jira configuration in environment variables');
+  it.each(Object.keys(mockEnv))('validates %s environment variable', (envVar) => {
+    const env = { ...mockEnv };
+    delete env[envVar as keyof typeof mockEnv];
+    process.env = { ...originalEnv, ...env };
+
+    expect(() => require('../tools'))
+      .toThrow('Missing required Jira configuration');
+  });
+
+  it('sends correct Jira API request', async () => {
+    const { createJiraIssueTool } = require('../tools');
+    await createJiraIssueTool.invoke(testIssueData);
+
+    const expectedUrl = `https://${mockEnv.JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`;
+    const [[url, requestBody, config]] = mockedAxios.post.mock.calls;
+
+    expect(url).toBe(expectedUrl);
+    expect(requestBody as JiraRequestBody).toMatchObject({
+      fields: {
+        project: { key: testIssueData.projectKey },
+        summary: testIssueData.summary,
+        issuetype: { name: testIssueData.issueType }
+      }
+    });
+    expect(config?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': expect.stringContaining('Basic ')
     });
   });
 
-  it('should throw error when JIRA_EMAIL is missing', async () => {
-    delete process.env.JIRA_EMAIL;
-    jest.isolateModules(async () => {
-      expect(() => require('../tools')).toThrow('Missing required Jira configuration in environment variables');
+  it('correctly converts markdown to Jira ADF', async () => {
+    const { createJiraIssueTool } = require('../tools');
+    const markdownDescription = '### Criterios de Aceptación\n' +
+        '\n' +
+        '| Dado que | Cuando | Entonces |\n' +
+        '|---|---|---|\n' +
+        '| es un nuevo producto | se cree la historia | se validará el funcionamiento correcto |';
+
+    await createJiraIssueTool.invoke({
+      ...testIssueData,
+      description: markdownDescription
+    });
+
+    const [[, requestBody]] = mockedAxios.post.mock.calls;
+    const typedBody = requestBody as JiraRequestBody;
+
+    expect(typedBody.fields.description).toMatchObject({
+      type: 'doc',
+      version: 1,
+      content: expect.arrayContaining([
+        expect.objectContaining({ type: 'table' })
+      ])
     });
   });
 
-  it('should throw error when JIRA_API_TOKEN is missing', async () => {
-    delete process.env.JIRA_API_TOKEN;
-    jest.isolateModules(async () => {
-      expect(() => require('../tools')).toThrow('Missing required Jira configuration in environment variables');
-    });
+  it('returns formatted success response', async () => {
+    const { createJiraIssueTool } = require('../tools');
+    const result = await createJiraIssueTool.invoke(testIssueData);
+
+    expect(result).toBe(
+      `Issue TEST-123 creado exitosamente. URL: https://${mockEnv.JIRA_DOMAIN}.atlassian.net/browse/TEST-123`
+    );
   });
 
-  // For the remaining tests, we'll import the tool here since we know the env vars are set
-  let createJiraIssueTool: any;
-
-  beforeEach(async () => {
-    jest.isolateModules(async () => {
-      const tools = require('../tools');
-      createJiraIssueTool = tools.createJiraIssueTool;
+  it('handles Jira API errors properly', async () => {
+    const { createJiraIssueTool } = require('../tools');
+    mockedAxios.post.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        data: { errorMessages: ['Invalid project'] },
+        status: 400,
+        statusText: 'Bad Request',
+        headers: {},
+        config: { headers: {} }
+      },
+      config: { headers: {} },
+      name: 'AxiosError',
+      message: 'Request failed'
     });
+
+    await expect(createJiraIssueTool.invoke(testIssueData))
+      .rejects
+      .toThrow('Error al crear el issue en Jira: Invalid project');
+  });
+
+  it('handles network errors', async () => {
+    const { createJiraIssueTool } = require('../tools');
+    const networkError = new Error('Network Error');
+    mockedAxios.post.mockRejectedValueOnce(networkError);
+
+    await expect(createJiraIssueTool.invoke(testIssueData))
+      .rejects
+      .toThrow('Network Error');
   });
 });
