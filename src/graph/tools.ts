@@ -103,8 +103,9 @@ async function getAssigneeUserID(assigneeEmailAddress: string): Promise<string> 
           "Content-Type": "application/json",
         },
       });
-    if (response.data.length === 0) {
-        throw new Error(`No se encontró un usuario con el email: ${assigneeEmailAddress}`);
+    if (!response || !response.data || response.data.length === 0) {
+      console.error('Response:', response);
+      throw new Error(`No se encontró un usuario con el email: ${assigneeEmailAddress}`);
     }
 
     return response.data[0].accountId; // Retorna el primer usuario encontrado
@@ -270,4 +271,3 @@ export const sendTaskToDevelopmentTool = tool(
 
 // Modificada la declaración de 'tools' para incluir ambas herramientas.
 export const tools = [createJiraIssueTool, sendTaskToDevelopmentTool];
-

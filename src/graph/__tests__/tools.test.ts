@@ -16,7 +16,8 @@ const testIssueData = {
   projectKey: 'TEST',
   summary: 'Test Issue',
   description: 'Test Description',
-  issueType: 'Bug'
+  issueType: 'Bug',
+  assigneeEmailAddress: 'test@mail.com'
 } as const;
 
 interface JiraRequestBody {
@@ -39,19 +40,40 @@ describe('createJiraIssueTool', () => {
   const mockedAxios = jest.mocked(axios);
   const originalEnv = process.env;
 
-  beforeAll(() => {
-    process.env = { ...originalEnv, ...mockEnv, ...mockEnvJira };
-  });
-
   beforeEach(() => {
     jest.resetModules();
-    mockedAxios.post.mockResolvedValue({
-      data: { key: 'TEST-123' },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: { headers: {} }
+
+    // Reset all mocks
+    mockedAxios.post.mockReset();
+    mockedAxios.get.mockReset();
+
+    // Ensure mockedAxios.get returns a valid response
+    jest.mocked(axios.get).mockImplementation(() => {
+      return Promise.resolve({
+        data: [{ accountId: 'test-user-id', emailAddress: 'test@mail.com' }],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {}
+      });
     });
+
+    // Ensure mockedAxios.post returns a valid response
+    mockedAxios.post.mockImplementation(() => {
+      return Promise.resolve({
+        data: {
+          id: 'TEST-123',
+          key: 'TEST-123',
+          self: 'https://jira.example.com/rest/api/3/issue/TEST-123'
+        },
+        status: 201,
+        statusText: 'Created',
+        headers: {},
+        config: {}
+      });
+    });
+
+    process.env = { ...originalEnv, ...mockEnv, ...mockEnvJira };
   });
 
   afterEach(() => {
@@ -130,6 +152,19 @@ describe('createJiraIssueTool', () => {
 
   it('handles Jira API errors properly', async () => {
     const { createJiraIssueTool } = require('../tools');
+
+    // Mock successful user search
+    mockedAxios.get.mockImplementationOnce(() => {
+      return Promise.resolve({
+        data: [{ accountId: 'test-user-id' }],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {}
+      });
+    });
+
+    // Mock failed issue creation
     mockedAxios.post.mockRejectedValueOnce({
       isAxiosError: true,
       response: {
@@ -137,11 +172,8 @@ describe('createJiraIssueTool', () => {
         status: 400,
         statusText: 'Bad Request',
         headers: {},
-        config: { headers: {} }
-      },
-      config: { headers: {} },
-      name: 'AxiosError',
-      message: 'Request failed'
+        config: {}
+      }
     });
 
     await expect(createJiraIssueTool.invoke(testIssueData))
@@ -151,6 +183,19 @@ describe('createJiraIssueTool', () => {
 
   it('handles network errors', async () => {
     const { createJiraIssueTool } = require('../tools');
+
+    // Mock successful user search
+    mockedAxios.get.mockImplementationOnce(() => {
+      return Promise.resolve({
+        data: [{ accountId: 'test-user-id' }],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {}
+      });
+    });
+
+    // Mock network error in issue creation
     const networkError = new Error('Network Error');
     mockedAxios.post.mockRejectedValueOnce(networkError);
 
