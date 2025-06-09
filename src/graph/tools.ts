@@ -86,17 +86,43 @@ function markdownToADF(markdown: string): any {
   };
 }
 
+/**
+ * Retrieves user ID of the assignee and search on the jira users API
+ * @param assigneeEmailAddress - The email address of the assignee.
+ * @returns Jira user ID
+ */
+async function getAssigneeUserID(assigneeEmailAddress: string): Promise<string> {
+  const response = await axios.get(
+      `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/user/search?query=${encodeURIComponent(assigneeEmailAddress)}`,
+      {
+        headers: {
+          Authorization: `Basic ${Buffer.from(
+              `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
+          ).toString("base64")}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+    if (response.data.length === 0) {
+        throw new Error(`No se encontró un usuario con el email: ${assigneeEmailAddress}`);
+    }
+
+    return response.data[0].accountId; // Retorna el primer usuario encontrado
+}
+
 // Update the createJiraIssueTool to use markdownToADF
 export const createJiraIssueTool = tool(
-  async ({ projectKey, summary, description, issueType }) => {
+  async ({ projectKey, summary, description, issueType, assigneeEmailAddress }) => {
     console.log("Intentando crear issue en Jira:");
     console.log(`  Proyecto: ${projectKey}`);
     console.log(`  Resumen: ${summary}`);
     console.log(`  Descripción: ${description}`);
     console.log(`  Tipo de Issue: ${issueType}`);
+    console.log(`  Asignado a: ${assigneeEmailAddress}`);
 
     try {
       const adfDescription = markdownToADF(description);
+      const assigneeId = await getAssigneeUserID(assigneeEmailAddress);
 
       const response = await axios.post(
         `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
@@ -110,6 +136,9 @@ export const createJiraIssueTool = tool(
             issuetype: {
               name: issueType,
             },
+            assignee: {
+              id: assigneeId
+            }
           },
         },
         {
@@ -151,6 +180,9 @@ export const createJiraIssueTool = tool(
           "El tipo de issue (ej. 'Task', 'Bug', 'Story'). Por defecto es 'Task'."
         )
         .default("Task"),
+      assigneeEmailAddress: z
+          .string()
+          .describe("El email del usuario al que se asignará el issue."),
     }),
   }
 );
