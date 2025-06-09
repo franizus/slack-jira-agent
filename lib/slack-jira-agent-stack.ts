@@ -25,6 +25,8 @@ export class SlackJiraAgentStack extends cdk.Stack {
         JIRA_DOMAIN: process.env.JIRA_DOMAIN!,
         JIRA_EMAIL: process.env.JIRA_EMAIL!,
         JIRA_API_TOKEN: process.env.JIRA_API_TOKEN!,
+        DEVELOPMENT_AGENT_URL: process.env.DEVELOPMENT_AGENT_URL!,
+        DEVELOPMENT_AGENT_API_KEY: process.env.DEVELOPMENT_AGENT_API_KEY!,
       },
     });
 
