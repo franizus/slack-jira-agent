@@ -113,21 +113,28 @@ async function getAssigneeUserID(assigneeEmailAddress: string): Promise<string> 
 
 // Update the createJiraIssueTool to use markdownToADF
 export const createJiraIssueTool = tool(
-  async ({ projectKey, summary, description, issueType, assigneeEmailAddress }) => {
-    console.log("Intentando crear issue en Jira:");
-    console.log(`  Proyecto: ${projectKey}`);
-    console.log(`  Resumen: ${summary}`);
-    console.log(`  Descripción: ${description}`);
-    console.log(`  Tipo de Issue: ${issueType}`);
-    console.log(`  Asignado a: ${assigneeEmailAddress}`);
+    async ({
+             projectKey,
+             summary,
+             description,
+             issueType,
+             assigneeEmailAddress,
+             uatDeployDate,
+             prodDeployDate,
+             priority,
+             methodology
+           }) => {
+      console.log("Intentando crear issue en Jira:");
+      console.log(`  Proyecto: ${projectKey}`);
+      console.log(`  Resumen: ${summary}`);
+      console.log(`  Descripción: ${description}`);
+      console.log(`  Tipo de Issue: ${issueType}`);
+      console.log(`  Asignado a: ${assigneeEmailAddress}`);
 
-    try {
-      const adfDescription = markdownToADF(description);
-      const assigneeId = await getAssigneeUserID(assigneeEmailAddress);
-
-      const response = await axios.post(
-        `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
-        {
+      try {
+        const adfDescription = markdownToADF(description);
+        const assigneeId = await getAssigneeUserID(assigneeEmailAddress);
+        const requestBody: any = {
           fields: {
             project: {
               key: projectKey,
@@ -141,51 +148,87 @@ export const createJiraIssueTool = tool(
               id: assigneeId
             }
           },
-        },
-        {
-          headers: {
-            Authorization: `Basic ${Buffer.from(
-              `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
-            ).toString("base64")}`,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
+        };
+        if( uatDeployDate ) {
+            requestBody.fields.customfield_11942 = uatDeployDate.toISOString(); // Reemplaza 'customfield_12345' con el ID real del campo UAT
         }
-      );
+        if( prodDeployDate ) {
+          requestBody.fields.customfield_11943 = prodDeployDate.toISOString(); // Reemplaza 'customfield_12346' con el ID real del campo PROD
+        }
+        if( priority ) {
+          requestBody.fields.priority = {
+            name: priority,
+          };
+        }
+        if( methodology && methodology.length > 0 ) {
+          requestBody.fields.customfield_12155 = methodology.map(method => ({
+            value: method
+          }));
+        }
+        const response = await axios.post(
+            `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
+            requestBody,
+            {
+              headers: {
+                Authorization: `Basic ${Buffer.from(
+                    `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
+                ).toString("base64")}`,
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+            }
+        );
 
-      const issueKey = response.data.key;
-      const issueUrl = `https://${JIRA_DOMAIN}.atlassian.net/browse/${issueKey}`;
-      return `Issue ${issueKey} creado exitosamente. URL: ${issueUrl}`;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorMessage =
-          error.response?.data?.errorMessages?.join(", ") || error.message;
-        console.log(`Error al crear el issue en Jira: ${errorMessage}`);
-        throw new Error(`Error al crear el issue en Jira: ${errorMessage}`);
+        const issueKey = response.data.key;
+        const issueUrl = `https://${JIRA_DOMAIN}.atlassian.net/browse/${issueKey}`;
+        return `Issue ${issueKey} creado exitosamente. URL: ${issueUrl}`;
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const errorMessage =
+              error.response?.data?.errorMessages?.join(", ") || error.message;
+          console.log(`Error al crear el issue en Jira: ${errorMessage}`);
+          throw new Error(`Error al crear el issue en Jira: ${errorMessage}`);
+        }
+        throw error;
       }
-      throw error;
+    },
+    {
+      name: "create_jira_issue",
+      description: "Crea un nuevo issue en Jira con los detalles proporcionados.",
+      schema: z.object({
+        projectKey: z
+            .string()
+            .describe("La clave del proyecto en Jira (ej. 'PROJ')."),
+        summary: z.string().describe("Un resumen conciso del issue."),
+        description: z.string().describe("Una descripción detallada del issue."),
+        issueType: z
+            .string()
+            .describe(
+                "El tipo de issue (ej. 'Task', 'Bug', 'Story'). Por defecto es 'Task'."
+            )
+            .default("Task"),
+        assigneeEmailAddress: z
+            .string()
+            .describe("El email del usuario al que se asignará el issue."),
+        uatDeployDate: z
+            .date()
+            .optional()
+            .describe("Fecha de despliegue UAT, opcional."),
+        prodDeployDate: z
+            .date()
+            .optional()
+            .describe("Fecha de despliegue en producción, opcional."),
+        priority: z
+            .enum(["Highest", "High", "Medium", "Low", "Lowest"])
+            .describe("Prioridad del issue (ej. 'Highest', 'High', 'Medium', 'Low', 'Lowest').")
+            .default("Medium"),
+        methodology: z
+            .array(z.enum(["Scrum", "Kanban"]))
+            .describe(
+                "Metodología de desarrollo asociada al issue (ej. 'Scrum', 'Kanban')."
+            )
+      }),
     }
-  },
-  {
-    name: "create_jira_issue",
-    description: "Crea un nuevo issue en Jira con los detalles proporcionados.",
-    schema: z.object({
-      projectKey: z
-        .string()
-        .describe("La clave del proyecto en Jira (ej. 'PROJ')."),
-      summary: z.string().describe("Un resumen conciso del issue."),
-      description: z.string().describe("Una descripción detallada del issue."),
-      issueType: z
-        .string()
-        .describe(
-          "El tipo de issue (ej. 'Task', 'Bug', 'Story'). Por defecto es 'Task'."
-        )
-        .default("Task"),
-      assigneeEmailAddress: z
-          .string()
-          .describe("El email del usuario al que se asignará el issue."),
-    }),
-  }
 );
 
 // Eliminada la primera declaración de 'tools' para evitar redeclaración.
