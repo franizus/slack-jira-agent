@@ -20,37 +20,36 @@ if (!JIRA_DOMAIN || !JIRA_EMAIL || !JIRA_API_TOKEN) {
  */
 function markdownToADF(markdown: string): any {
   const tokens = marked.lexer(markdown);
-  const adfContent: any[] = [];
 
-  tokens.forEach((token) => {
+  const adfContent = tokens.map((token) => {
     if (token.type === "paragraph") {
-      adfContent.push({
+      return {
         type: "paragraph",
         content: [{ type: "text", text: token.text }],
-      });
-    } else if (token.type === "heading") {
-      adfContent.push({
+      };
+    }
+
+    if (token.type === "heading") {
+      return {
         type: "heading",
-        attrs: {
-          level: token.depth
-        },
+        attrs: { level: token.depth },
         content: [{ type: "text", text: token.text }],
-      });
-    } else if (token.type === "table") {
+      };
+    }
+
+    if (token.type === "table") {
       const tableContent = token.rows.map((row: any[]) => ({
         type: "tableRow",
         content: row.map((cell) => ({
           type: "tableCell",
           content: [{
             type: "paragraph",
-            content: [{
-              type: "text",
-              text: cell.text || "",
-            }],
+            content: [{ type: "text", text: cell.text || "" }],
           }],
         })),
       }));
-      if(token.header) {
+
+      if (token.header) {
         tableContent.unshift({
           type: "tableRow",
           content: token.header.map((cell: { text: any; }) => ({
@@ -60,30 +59,20 @@ function markdownToADF(markdown: string): any {
               content: [{
                 type: "text",
                 text: cell.text || "",
-                marks: [
-                  {
-                    "type": "strong"
-                  }
-                ]
-              }]
+                marks: [{ type: "strong" }],
+              }],
             }],
           })),
         });
       }
 
-      adfContent.push({
-        type: "table",
-        content: tableContent,
-      });
+      return { type: "table", content: tableContent };
     }
-    // Add more token types as needed
-  });
 
-  return {
-    type: "doc",
-    version: 1,
-    content: adfContent,
-  };
+    return null; // Skip unsupported token types
+  }).filter(Boolean);
+
+  return { type: "doc", version: 1, content: adfContent };
 }
 
 /**
@@ -92,93 +81,79 @@ function markdownToADF(markdown: string): any {
  * @returns Jira user ID
  */
 async function getAssigneeUserID(assigneeEmailAddress: string): Promise<string> {
-  const response = await axios.get(
-      `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/user/search?query=${encodeURIComponent(assigneeEmailAddress)}`,
-      {
-        headers: {
-          Authorization: `Basic ${Buffer.from(
-              `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
-          ).toString("base64")}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      });
-    if (!response || !response.data || response.data.length === 0) {
-      console.error('Response:', response);
-      throw new Error(`No se encontró un usuario con el email: ${assigneeEmailAddress}`);
-    }
+  const url = `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/user/search?query=${encodeURIComponent(assigneeEmailAddress)}`;
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
 
-    return response.data[0].accountId; // Retorna el primer usuario encontrado
+  const { data } = await axios.get(url, { headers });
+
+  if (!data?.length) {
+    console.error('Response:', data);
+    throw new Error(`No se encontró un usuario con el email: ${assigneeEmailAddress}`);
+  }
+
+  return data[0].accountId;
 }
 
 // Update the createJiraIssueTool to use markdownToADF
 export const createJiraIssueTool = tool(
-    async ({
-             projectKey,
-             summary,
-             description,
-             issueType,
-             assigneeEmailAddress,
-             uatDeployDate,
-             prodDeployDate,
-             priority,
-             methodology
-           }) => {
-      console.log("Intentando crear issue en Jira:");
-      console.log(`  Proyecto: ${projectKey}`);
-      console.log(`  Resumen: ${summary}`);
-      console.log(`  Descripción: ${description}`);
-      console.log(`  Tipo de Issue: ${issueType}`);
-      console.log(`  Asignado a: ${assigneeEmailAddress}`);
+  async ({
+    projectKey,
+    summary,
+    description,
+    issueType = "Task",
+    assigneeEmailAddress,
+    uatDeployDate,
+    prodDeployDate,
+    priority = "Medium",
+    methodology
+  }) => {
+    console.log("Intentando crear issue en Jira:", {
+      projectKey,
+      summary,
+      description,
+      issueType,
+      assigneeEmailAddress,
+    });
 
-      try {
-        const adfDescription = markdownToADF(description);
-        const assigneeId = await getAssigneeUserID(assigneeEmailAddress);
-        const requestBody: any = {
-          fields: {
-            project: {
-              key: projectKey,
-            },
-            summary: summary,
-            description: adfDescription,
-            issuetype: {
-              name: issueType,
-            },
-            assignee: {
-              id: assigneeId
-            }
+    try {
+      const adfDescription = markdownToADF(description);
+      const assigneeId = await getAssigneeUserID(assigneeEmailAddress);
+
+      const requestBody = {
+        fields: {
+          project: { key: projectKey },
+          summary,
+          description: adfDescription,
+          issuetype: { name: issueType },
+          assignee: { id: assigneeId },
+          ...(uatDeployDate && { customfield_11942: uatDeployDate }),
+          ...(prodDeployDate && { customfield_11896: prodDeployDate }),
+          ...(priority && { priority: { name: priority } }),
+          ...(methodology?.length && {
+            customfield_12155: methodology.map((method) => ({ value: method })),
+          }),
+        },
+      };
+
+      console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+
+      const response = await axios.post(
+        `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
+        requestBody,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(
+              `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
+            ).toString("base64")}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
           },
-        };
-        if( uatDeployDate ) {
-            requestBody.fields.customfield_11942 = uatDeployDate; // Reemplaza 'customfield_12345' con el ID real del campo UAT
         }
-        if( prodDeployDate ) {
-          requestBody.fields.customfield_11896 = prodDeployDate; // Reemplaza 'customfield_12346' con el ID real del campo PROD
-        }
-        if( priority ) {
-          requestBody.fields.priority = {
-            name: priority,
-          };
-        }
-        if( methodology && methodology.length > 0 ) {
-          requestBody.fields.customfield_12155 = methodology.map(method => ({
-            value: method
-          }));
-        }
-        console.log("Request Body: ", JSON.stringify(requestBody, null, 2));
-        const response = await axios.post(
-            `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
-            requestBody,
-            {
-              headers: {
-                Authorization: `Basic ${Buffer.from(
-                    `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
-                ).toString("base64")}`,
-                Accept: "application/json",
-                "Content-Type": "application/json",
-              },
-            }
-        );
+      );
 
         const issueKey = response.data.key;
         const issueUrl = `https://${JIRA_DOMAIN}.atlassian.net/browse/${issueKey}`;
@@ -243,6 +218,8 @@ if (!DEVELOPMENT_AGENT_URL || !DEVELOPMENT_AGENT_API_KEY) {
 export const sendTaskToDevelopmentTool = tool(
   async ({ query, jiraTicketID }: { query: string, jiraTicketID?: string }) => {
     return new Promise<string>((resolve, reject) => {
+      console.log("query:", query);
+      console.log("jiraTicketID:", jiraTicketID);
       const url = DEVELOPMENT_AGENT_URL;
       const headers = {
         "Content-Type": "application/json",
