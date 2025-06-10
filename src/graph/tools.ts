@@ -244,29 +244,11 @@ export const sendTaskToDevelopmentTool = tool(
       };
 
       fetch(DEVELOPMENT_AGENT_URL, requestOptions)
-          .then((response) => {
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder("utf-8");
-            let finalResultMessage = "";
+          .then((response) => response.text())
+          .then((result) => {
+            console.log(result);
+            resolve(result)
 
-            if (!reader) {
-                throw new Error("No reader available for response body");
-            }
-
-            return reader.read().then(function processStream({ done, value }) {
-                if (done) {
-                    try {
-                        const jsonResponse = JSON.parse(finalResultMessage);
-                        resolve(jsonResponse);
-                    } catch (error) {
-                        reject(new Error("Failed to parse JSON response: " + error.message));
-                    }
-                    return;
-                }
-
-                finalResultMessage += decoder.decode(value, { stream: true });
-                return reader.read().then(processStream);
-            });
           })
           .catch((error) => reject(error));
     });
@@ -293,3 +275,4 @@ export const sendTaskToDevelopmentTool = tool(
 
 // Modificada la declaración de 'tools' para incluir ambas herramientas.
 export const tools = [createJiraIssueTool, sendTaskToDevelopmentTool];
+
