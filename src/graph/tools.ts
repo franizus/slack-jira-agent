@@ -150,10 +150,10 @@ export const createJiraIssueTool = tool(
           },
         };
         if( uatDeployDate ) {
-            requestBody.fields.customfield_11942 = uatDeployDate.toISOString(); // Reemplaza 'customfield_12345' con el ID real del campo UAT
+            requestBody.fields.customfield_11942 = uatDeployDate; // Reemplaza 'customfield_12345' con el ID real del campo UAT
         }
         if( prodDeployDate ) {
-          requestBody.fields.customfield_11943 = prodDeployDate.toISOString(); // Reemplaza 'customfield_12346' con el ID real del campo PROD
+          requestBody.fields.customfield_11943 = prodDeployDate; // Reemplaza 'customfield_12346' con el ID real del campo PROD
         }
         if( priority ) {
           requestBody.fields.priority = {
@@ -211,13 +211,15 @@ export const createJiraIssueTool = tool(
             .string()
             .describe("El email del usuario al que se asignará el issue."),
         uatDeployDate: z
+            .string()
             .date()
             .optional()
-            .describe("Fecha de despliegue UAT, opcional."),
+            .describe("Fecha de despliegue UAT en formato 'YYYY-MM-DD', opcional."),
         prodDeployDate: z
+            .string()
             .date()
             .optional()
-            .describe("Fecha de despliegue en producción, opcional."),
+            .describe("Fecha de despliegue en producción en formato 'YYYY-MM-DD', opcional."),
         priority: z
             .enum(["Highest", "High", "Medium", "Low", "Lowest"])
             .describe("Prioridad del issue (ej. 'Highest', 'High', 'Medium', 'Low', 'Lowest').")
