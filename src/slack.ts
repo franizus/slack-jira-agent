@@ -86,3 +86,4 @@ export const assistentThreadSetStatus = async (
     console.error("Error al establecer el estado del hilo:", error);
   }
 };
+

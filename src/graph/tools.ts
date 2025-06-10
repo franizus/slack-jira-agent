@@ -2,7 +2,6 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import axios from "axios";
 import { marked } from "marked";
-import { EventSource } from "eventsource"; // MessageEvent debería estar disponible globalmente con @types/eventsource
 
 // Jira configuration from environment variables
 const JIRA_DOMAIN = process.env.JIRA_DOMAIN;
@@ -232,42 +231,44 @@ export const sendTaskToDevelopmentTool = tool(
       }
       const body = JSON.stringify({ query: request });
 
-      const es = new EventSource(url, {
+
+      const raw = JSON.stringify({
+        "query": "crear una nueva función Lambda en `usrv-card` para obtener detalles de transacciones por `transaction-reference`"
+      });
+
+      const requestOptions: RequestInit = {
         method: "POST",
         headers: headers,
-        body: body,
-      } as EventSourceInit);
-
-      let fullResponse = "";
-
-      es.onmessage = (event: MessageEvent) => {
-        fullResponse += event.data;
+        body: raw,
+        redirect: "follow"
       };
 
-      es.onerror = (error: Event) => { // Usar Event o any si MessageEvent no es adecuado para error
-        console.error("SSE Error:", error);
-        es.close();
-        // @ts-ignore
-        const errorMessage = error.message || "Error desconocido";
-        reject(
-          new Error(
-            `Error en la conexión SSE: ${errorMessage}`
-          )
-        );
-      };
+      fetch(DEVELOPMENT_AGENT_URL, requestOptions)
+          .then((response) => {
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let finalResultMessage = "";
 
-      const originalOnMessage = es.onmessage;
-      es.onmessage = (event: MessageEvent) => { // Especificar tipo para event
-        if (event.data === "[DONE]") {
-          es.close();
-          resolve(fullResponse);
-          return;
-        }
-        // Asegurarse de que originalOnMessage no sea null antes de llamarlo
-        if (originalOnMessage) {
-          originalOnMessage(event);
-        }
-      };
+            if (!reader) {
+                throw new Error("No reader available for response body");
+            }
+
+            return reader.read().then(function processStream({ done, value }) {
+                if (done) {
+                    try {
+                        const jsonResponse = JSON.parse(finalResultMessage);
+                        resolve(jsonResponse);
+                    } catch (error) {
+                        reject(new Error("Failed to parse JSON response: " + error.message));
+                    }
+                    return;
+                }
+
+                finalResultMessage += decoder.decode(value, { stream: true });
+                return reader.read().then(processStream);
+            });
+          })
+          .catch((error) => reject(error));
     });
   },
   {

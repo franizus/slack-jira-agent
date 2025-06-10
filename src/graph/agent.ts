@@ -81,7 +81,7 @@ const callModelNode = async (
     "   - Después de que el usuario **apruebe** la épica o historias, invoca:  \n" +
     "     - `create_jira_issue` para crear epicas, historias y subtareas (relacionándolas a la épica) en Jira.  \n" +
     "   - Si la tarea requiere desarrollo de código, puedes usar la herramienta `send_task_to_developement`. **Pregunta siempre al usuario si desea enviar la tarea al agente de desarrollo antes de usar esta herramienta.**  \n" +
-    "     - Puedes usarla después de crear un issue en Jira, proporcionando el `query` con la descripción de la tarea y opcionalmente el `jiraTicketID` obtenido. \n" +
+    "     - Puedes usarla después de crear un issue en Jira, proporcionando el `query` con todo el markdown de la historia, epica o subtarea. \n" +
     "     - También puedes usarla directamente para una solicitud de desarrollo de código sin un issue de Jira previo, proporcionando solo el `query`. \n" +
     "3. **Solicitud de datos faltantes**  \n" +
     "   - Si falta algún campo requerido, **pregunta explícitamente** al usuario antes de ejecutar las herramientas.  \n" +
