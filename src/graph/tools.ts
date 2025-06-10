@@ -153,7 +153,7 @@ export const createJiraIssueTool = tool(
             requestBody.fields.customfield_11942 = uatDeployDate; // Reemplaza 'customfield_12345' con el ID real del campo UAT
         }
         if( prodDeployDate ) {
-          requestBody.fields.customfield_11943 = prodDeployDate; // Reemplaza 'customfield_12346' con el ID real del campo PROD
+          requestBody.fields.customfield_11896 = prodDeployDate; // Reemplaza 'customfield_12346' con el ID real del campo PROD
         }
         if( priority ) {
           requestBody.fields.priority = {
