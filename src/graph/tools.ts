@@ -165,6 +165,7 @@ export const createJiraIssueTool = tool(
             value: method
           }));
         }
+        console.log("Request Body: ", JSON.stringify(requestBody, null, 2));
         const response = await axios.post(
             `https://${JIRA_DOMAIN}.atlassian.net/rest/api/3/issue`,
             requestBody,
