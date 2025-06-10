@@ -212,12 +212,10 @@ export const createJiraIssueTool = tool(
             .describe("El email del usuario al que se asignará el issue."),
         uatDeployDate: z
             .string()
-            .date()
             .optional()
             .describe("Fecha de despliegue UAT en formato 'YYYY-MM-DD', opcional."),
         prodDeployDate: z
             .string()
-            .date()
             .optional()
             .describe("Fecha de despliegue en producción en formato 'YYYY-MM-DD', opcional."),
         priority: z
