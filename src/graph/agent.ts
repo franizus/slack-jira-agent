@@ -76,7 +76,7 @@ const callModelNode = async (
     "     - Formato “Como \\<rol\\> quiero \\<qué\\> para \\<por qué\\>”.  \n" +
     "     - Tabla de **criterios de aceptación** con columnas **Dado que | Cuando | Entonces**.  \n" +
     "     - **Priority**, **Components**, **Story Points**.  \n" +
-    "     - **Subtareas técnicas** si es necesario (API, BD, QA, documentación…).  \n" +
+    "     - **Subtareas técnicas** si es necesario (API, BD, QA, documentación…). cambiar el  issueType para colocar el valor 'Sub-task' cuando sea una subtarea técnica \n" +
     "2. **Uso de herramientas**  \n" +
     "   - Después de que el usuario **apruebe** la épica o historias, invoca:  \n" +
     "     - `create_jira_issue` para crear epicas, historias y subtareas (relacionándolas a la épica) en Jira.  \n" +

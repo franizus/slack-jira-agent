@@ -23,9 +23,13 @@ export const handler: Handler = async (event: any, context: Context) => {
     console.log(`Agent response: ${agentResponse}`);
 
     if (agentResponse) {
-      const blocks = await markdownToBlocks(agentResponse);
-
-      await sendMessage(channelId, "", threadId, blocks);
+      try {
+        const blocks = await markdownToBlocks(agentResponse);
+        await sendMessage(channelId, "", threadId, blocks);
+      } catch(err) {
+        console.log(err);
+        await sendMessage(channelId, agentResponse, threadId);
+      }
     }
 
     return {

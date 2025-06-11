@@ -2,6 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import axios from "axios";
 import { marked } from "marked";
+import {error} from "aws-cdk/lib/logging";
 
 // Jira configuration from environment variables
 const JIRA_DOMAIN = process.env.JIRA_DOMAIN;
@@ -108,7 +109,8 @@ export const createJiraIssueTool = tool(
     uatDeployDate,
     prodDeployDate,
     priority = "Medium",
-    methodology
+    methodology,
+   parentIssueKey
   }) => {
     console.log("Intentando crear issue en Jira:", {
       projectKey,
@@ -116,6 +118,7 @@ export const createJiraIssueTool = tool(
       description,
       issueType,
       assigneeEmailAddress,
+      parentIssueKey
     });
 
     try {
@@ -135,6 +138,7 @@ export const createJiraIssueTool = tool(
           ...(methodology?.length && {
             customfield_12155: methodology.map((method) => ({ value: method })),
           }),
+          ...(parentIssueKey && { parent: { key: parentIssueKey } }),
         },
       };
 
@@ -201,7 +205,13 @@ export const createJiraIssueTool = tool(
             .array(z.enum(["Scrum", "Kanban"]))
             .describe(
                 "Metodología de desarrollo asociada al issue (ej. 'Scrum', 'Kanban')."
-            )
+            ),
+        parentIssueKey: z
+            .string()
+            .optional()
+            .describe(
+                "Clave del issue padre si este issue es un subtipo. Por ejemplo, 'PROJ-123'."
+            ),
       }),
     }
 );
@@ -225,15 +235,9 @@ export const sendTaskToDevelopmentTool = tool(
         "x-api-key": DEVELOPMENT_AGENT_API_KEY,
         Accept: "application/octet-stream",
       };
-      let request = query;
-      if (jiraTicketID) {
-        request += `\nPuedes obtener más información del ticket de Jira: ${jiraTicketID}`;
-      }
-      const body = JSON.stringify({ query: request });
-
 
       const raw = JSON.stringify({
-        "query": "crear una nueva función Lambda en `usrv-card` para obtener detalles de transacciones por `transaction-reference`"
+        "query": query
       });
 
       const requestOptions: RequestInit = {
@@ -243,14 +247,23 @@ export const sendTaskToDevelopmentTool = tool(
         redirect: "follow"
       };
 
-      fetch(DEVELOPMENT_AGENT_URL, requestOptions)
-          .then((response) => response.text())
-          .then((result) => {
-            console.log(result);
-            resolve(result)
-
-          })
-          .catch((error) => reject(error));
+      fetchSse(url,{
+        ...requestOptions,
+        onMessage: (event) => {
+          console.log("Evento SSE recibido:", event);
+          if (event.event === "final_result_message") {
+            const response = JSON.parse(event.data);
+            console.log("Respuesta completa del servicio de desarrollo:", response);
+            resolve(response.result_message || "Respuesta recibida sin mensaje específico.");
+          } else {
+            console.log("Mensaje genérico:", event.data);
+          }
+        },
+        onError: (error) => {
+          console.error("Error en la conexión SSE:", error);
+          reject(error);
+        },
+      });
     });
   },
   {
@@ -261,7 +274,7 @@ export const sendTaskToDevelopmentTool = tool(
       query: z
         .string()
         .describe(
-          "La pregunta o instrucción para el servicio de desarrollo de código."
+          "markdown completo la historia de usuario creada previamente en jira para contexto de las subtareas técnicas. "
         ),
       jiraTicketID: z
         .string()
@@ -272,7 +285,150 @@ export const sendTaskToDevelopmentTool = tool(
     }),
   }
 );
+// Definimos una interfaz para los eventos que esperamos recibir
+interface SseEvent {
+  event?: string; // El nombre del evento (si es personalizado)
+  data: string;  // Los datos del evento
+  id?: string;    // El ID del evento
+}
+
+// Opciones para nuestra función de fetch
+interface FetchSseOptions extends RequestInit {
+  onMessage: (event: SseEvent) => void;
+  onError?: (error: any) => void;
+  // Puedes añadir un onOpen o onClose si lo necesitas
+}
+
+async function fetchSse(url: string, options: FetchSseOptions): Promise<void> {
+  const { onMessage, onError, ...fetchOptions } = options;
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      headers: {
+        'Accept': 'text/event-stream',
+        // Agrega cualquier otro encabezado que necesites
+        ...fetchOptions.headers,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const processStream = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break; // El stream ha finalizado
+        }
+
+        // Decodificamos el chunk y lo añadimos al buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Buscamos delimitadores de mensaje ('\n\n') en el buffer
+        let boundaryIndex;
+        while ((boundaryIndex = buffer.indexOf('\n\n')) >= 0) {
+          const message = buffer.substring(0, boundaryIndex);
+          buffer = buffer.substring(boundaryIndex + 2); // Eliminamos el mensaje procesado del buffer
+
+          if (message.startsWith(':')) { // Es un comentario, lo ignoramos
+            continue;
+          }
+
+          const sseEvent: SseEvent = { data: '' };
+          const lines = message.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              // Si ya hay datos, se agrega una nueva línea (para datos multilínea)
+              if(sseEvent.data) sseEvent.data += '\n';
+              sseEvent.data += line.substring(5).trim();
+            } else if (line.startsWith('event:')) {
+              sseEvent.event = line.substring(6).trim();
+            } else if (line.startsWith('id:')) {
+              sseEvent.id = line.substring(3).trim();
+            }
+            // Aquí se podría manejar el campo 'retry:' si fuera necesario
+          }
+
+          if (sseEvent.data) {
+            onMessage(sseEvent);
+          }
+        }
+      }
+    };
+
+    await processStream();
+
+  } catch (error) {
+    if (onError) {
+      onError(error);
+    } else {
+      console.error('SSE fetch error:', error);
+    }
+  }
+}
+
+// --- CÓMO USAR LA FUNCIÓN ---
+
+const sseEndpoint = 'http://localhost:3000/sse'; // Cambia esto a tu endpoint
+
+console.log('Conectando al stream SSE...');
+
+fetchSse(sseEndpoint, {
+  method: 'GET', // o 'POST' si tu endpoint lo requiere
+  headers: {
+    'Authorization': 'Bearer tu-token-aqui', // Ejemplo de encabezado personalizado
+  },
+  onMessage: (event) => {
+    console.log('Evento SSE recibido:');
+
+    // Si tienes eventos con nombre, puedes usar un switch
+    switch (event.event) {
+      case 'final_result_message':
+        console.log('Evento de actualización de usuario:');
+        const userData = JSON.parse(event.data);
+        console.log(userData);
+        break;
+      default: // Eventos sin nombre (onmessage)
+        console.log('Mensaje genérico:', event.data);
+        break;
+    }
+
+    if (event.id) {
+      console.log(`ID del evento: ${event.id}`);
+    }
+  },
+  onError: (error) => {
+    console.error('Hubo un error con la conexión SSE:', error);
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Modificada la declaración de 'tools' para incluir ambas herramientas.
 export const tools = [createJiraIssueTool, sendTaskToDevelopmentTool];
+
+
 
